@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import crypto from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,11 +18,16 @@ async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS registrations (
       id SERIAL PRIMARY KEY,
+      reg_id VARCHAR(36) UNIQUE NOT NULL,
       name VARCHAR(255) NOT NULL,
       phone VARCHAR(30) NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Mavjud jadvalga reg_id ustunini qo'shish (agar oldin yaratilgan bo'lsa)
+  await pool.query(`
+    ALTER TABLE registrations ADD COLUMN IF NOT EXISTS reg_id VARCHAR(36) UNIQUE
+  `).catch(() => {});
 }
 
 // ─── Middleware ───────────────────────────────────────────
@@ -46,9 +52,11 @@ app.post('/api/register', async (req, res) => {
   }
 
   try {
+    const regId = crypto.randomUUID();
+
     await pool.query(
-      'INSERT INTO registrations (name, phone) VALUES ($1, $2)',
-      [name.trim(), phone]
+      'INSERT INTO registrations (reg_id, name, phone) VALUES ($1, $2, $3)',
+      [regId, name.trim(), phone]
     );
 
     // Fire-and-forget to Google Sheets
@@ -57,6 +65,7 @@ app.post('/api/register', async (req, res) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          reg_id: regId,
           name: name.trim(),
           phone,
           date: new Date().toISOString(),
@@ -107,17 +116,17 @@ async function syncFromSheets() {
     if (!Array.isArray(rows)) return;
 
     for (const row of rows) {
-      if (!row.phone) continue;
+      if (!row.reg_id || !row.phone) continue;
 
       const exists = await pool.query(
-        'SELECT 1 FROM registrations WHERE phone = $1',
-        [row.phone]
+        'SELECT 1 FROM registrations WHERE reg_id = $1',
+        [row.reg_id]
       );
 
       if (exists.rowCount === 0) {
         await pool.query(
-          'INSERT INTO registrations (name, phone, created_at) VALUES ($1, $2, $3)',
-          [row.name || '', row.phone, row.date ? new Date(row.date) : new Date()]
+          'INSERT INTO registrations (reg_id, name, phone, created_at) VALUES ($1, $2, $3, $4)',
+          [row.reg_id, row.name || '', row.phone, row.date ? new Date(row.date) : new Date()]
         );
       }
     }

@@ -11,7 +11,7 @@
  * 5. URL ni backend .env dagi GOOGLE_SCRIPT_URL ga qo'ying
  *
  * Sheets birinchi qatori sarlavha bo'lishi kerak:
- * | name | phone | date |
+ * | reg_id | name | phone | date |
  */
 
 // POST — yangi ro'yxatdan o'tganlarni yozadi
@@ -19,8 +19,22 @@ function doPost(e) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     var data = JSON.parse(e.postData.contents);
+    var regId = data.reg_id || '';
+
+    // reg_id bo'yicha dublikat tekshirish
+    if (regId) {
+      var existing = sheet.getDataRange().getValues();
+      for (var i = 1; i < existing.length; i++) {
+        if (String(existing[i][0]) === String(regId)) {
+          return ContentService
+            .createTextOutput(JSON.stringify({ status: 'duplicate' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+    }
 
     sheet.appendRow([
+      regId,
       data.name || '',
       data.phone || '',
       data.date || new Date().toISOString()
