@@ -68,7 +68,7 @@ app.post('/api/register', async (req, res) => {
           reg_id: regId,
           name: name.trim(),
           phone,
-          date: new Date().toISOString(),
+          date: new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         }),
       }).catch(() => {});
     }
